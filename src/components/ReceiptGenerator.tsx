@@ -9,6 +9,8 @@ import { Download } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { TemplateType, receiptTemplates } from '@/templates/receipt-templates';
+import { generateDefaultItems } from '@/utils/receipt-helpers';
 
 // 定义票据数据的接口
 interface ReceiptData {
@@ -16,16 +18,84 @@ interface ReceiptData {
   address: string;
   phone: string;
   date: string;
+  time?: string;
   amount: string;
   taxRate: number;
   tipRate: number;
   subtotal: string;
   tax: string;
   tip: string;
+  orderNumber?: string;
+  cashier?: string;
+  terminal?: string;
+  paymentMethod?: string;
+  cardNumber?: string;
+  authCode?: string;
+  items?: Array<{
+    name: string;
+    quantity: number;
+    price: number;
+    total: number;
+  }>;
+  // 可选项
+  hasLogo?: boolean;
+  showItems?: boolean;
+  showPaymentDetails?: boolean;
+  showOrderNumber?: boolean;
 }
 
-// 定义模板类型
-type TemplateType = 'thermal' | 'pos' | 'modern';
+// 辅助函数
+const generateOrderNumber = () => Math.random().toString(36).substr(2, 8).toUpperCase();
+const generateLastFourDigits = () => Math.floor(1000 + Math.random() * 9000).toString();
+const generateAuthCode = () => Math.random().toString(36).substr(2, 6).toUpperCase();
+const generateTerminalId = () => 'TERM' + Math.floor(100 + Math.random() * 900);
+const generateStaffId = () => Math.floor(100 + Math.random() * 900);
+const generateReceiptBarcode = () => (
+  <div className="mt-2 text-center">
+    <div className="font-mono text-xs">
+      {Array(12).fill(0).map(() => Math.floor(Math.random() * 10)).join('')}
+    </div>
+  </div>
+);
+
+// 添加模板预览组件
+const TemplatePreview: React.FC<{
+  template: TemplateType;
+  selected: boolean;
+  onSelect: () => void;
+}> = ({ template, selected, onSelect }) => (
+  <div
+    className={`border rounded-lg p-4 cursor-pointer transition-all ${
+      selected ? 'border-blue-500 bg-blue-50' : 'hover:border-gray-400'
+    }`}
+    onClick={onSelect}
+  >
+    <img
+      src={template.preview}
+      alt={template.name}
+      className="w-full h-40 object-contain mb-2"
+    />
+    <h3 className="font-medium">{template.name}</h3>
+    <p className="text-sm text-gray-600">{template.description}</p>
+  </div>
+);
+
+// 在 ReceiptGenerator 组件中添加模板选择部分
+const TemplateSelector: React.FC<{
+  selectedId: string;
+  onSelect: (id: string) => void;
+}> = ({ selectedId, onSelect }) => (
+  <div className="grid grid-cols-3 gap-4 mb-6">
+    {Object.values(receiptTemplates).map(template => (
+      <TemplatePreview
+        key={template.id}
+        template={template}
+        selected={template.id === selectedId}
+        onSelect={() => onSelect(template.id)}
+      />
+    ))}
+  </div>
+);
 
 const ReceiptGenerator = () => {
   const { toast } = useToast();
@@ -45,121 +115,30 @@ const ReceiptGenerator = () => {
     tip: ''
   });
 
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateType>('thermal');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(Object.keys(receiptTemplates)[0]);
   const [receiptContent, setReceiptContent] = useState<React.ReactNode | null>(null);
 
-  // 模板定义
-  const templates = useMemo(() => ({
-    thermal: (data: ReceiptData) => (
-      <div className="p-6 bg-white font-mono text-sm">
-        <div className="text-center mb-4">
-          <div className="text-lg font-bold">{data.merchant}</div>
-          <div>{data.address}</div>
-          <div>{data.phone}</div>
-        </div>
-        <div className="border-t border-b border-dashed py-2 my-2">
-          <div>Date: {data.date}</div>
-        </div>
-        <div className="space-y-1 my-4">
-          <div className="flex justify-between">
-            <span>Subtotal</span>
-            <span>${data.subtotal}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Tax ({data.taxRate}%)</span>
-            <span>${data.tax}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Tip ({data.tipRate}%)</span>
-            <span>${data.tip}</span>
-          </div>
-        </div>
-        <div className="border-t border-dashed pt-2">
-          <div className="flex justify-between font-bold">
-            <span>Total</span>
-            <span>${data.amount}</span>
-          </div>
-        </div>
-        <div className="text-center mt-4 text-xs">
-          <div>Thank you for your business!</div>
-        </div>
-      </div>
-    ),
-    pos: (data: ReceiptData) => (
-      <div className="p-6 bg-white font-sans">
-        <div className="text-center mb-4">
-          <div className="text-xl font-bold">{data.merchant}</div>
-          <div className="text-gray-600">{data.address}</div>
-          <div className="text-gray-600">{data.phone}</div>
-        </div>
-        <div className="border-t border-gray-200 py-2">
-          <div className="text-gray-600">Date: {data.date}</div>
-        </div>
-        <div className="space-y-2 my-4">
-          <div className="flex justify-between">
-            <span>Subtotal</span>
-            <span>${data.subtotal}</span>
-          </div>
-          <div className="flex justify-between text-gray-600">
-            <span>Tax ({data.taxRate}%)</span>
-            <span>${data.tax}</span>
-          </div>
-          <div className="flex justify-between text-gray-600">
-            <span>Tip ({data.tipRate}%)</span>
-            <span>${data.tip}</span>
-          </div>
-        </div>
-        <div className="border-t border-gray-200 pt-2">
-          <div className="flex justify-between font-bold">
-            <span>Total</span>
-            <span>${data.amount}</span>
-          </div>
-        </div>
-        <div className="text-center mt-4 text-gray-500">
-          <div>Thank you for your business!</div>
-        </div>
-      </div>
-    ),
-    modern: (data: ReceiptData) => (
-      <div className="p-6 bg-white border rounded-lg shadow-sm font-sans">
-        <div className="text-center mb-6">
-          <div className="text-2xl font-bold text-gray-800">{data.merchant}</div>
-          <div className="text-gray-600">{data.address}</div>
-          <div className="text-gray-600">{data.phone}</div>
-        </div>
-        <div className="border-t border-gray-200 py-4">
-          <div className="flex justify-between text-gray-600">
-            <span>Date:</span>
-            <span>{data.date}</span>
-          </div>
-        </div>
-        <div className="space-y-2 my-6">
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600">Subtotal</span>
-            <span className="text-lg">${data.subtotal}</span>
-          </div>
-          <div className="flex justify-between items-center text-gray-600">
-            <span>Tax ({data.taxRate}%)</span>
-            <span>${data.tax}</span>
-          </div>
-          <div className="flex justify-between items-center text-gray-600">
-            <span>Tip ({data.tipRate}%)</span>
-            <span>${data.tip}</span>
-          </div>
-        </div>
-        <div className="border-t border-gray-200 pt-4">
-          <div className="flex justify-between items-center">
-            <span className="text-xl font-semibold">Total</span>
-            <span className="text-2xl font-bold">${data.amount}</span>
-          </div>
-        </div>
-        <div className="mt-8 text-center text-gray-500">
-          <div>Thank you for your business!</div>
-          <div className="text-sm mt-2">www.example.com</div>
-        </div>
-      </div>
-    )
-  }), []);
+  // 在 ReceiptGenerator 组件中添加配置选项
+  const [receiptOptions, setReceiptOptions] = useState({
+    hasLogo: true,
+    showItems: true,
+    showPaymentDetails: true,
+    showOrderNumber: true,
+  });
+
+  // 在 ReceiptGenerator 组件中添加商品管理
+  const [items, setItems] = useState<Array<{
+    name: string;
+    quantity: number;
+    price: number;
+    total: number;
+  }>>([]);
+
+  const [newItem, setNewItem] = useState({
+    name: '',
+    quantity: 1,
+    price: 0
+  });
 
   // 商户搜索函数
   const searchMerchant = useCallback(async (query: string) => {
@@ -225,8 +204,8 @@ const ReceiptGenerator = () => {
     }));
   }, []);
 
-  // 导出为PDF
-  const exportToPDF = async () => {
+  // 将 exportToPDF 重命名为 generatePDF 以保持一致性
+  const generatePDF = async () => {
     if (!receiptRef.current) return;
 
     try {
@@ -319,9 +298,9 @@ const ReceiptGenerator = () => {
     }));
   };
 
-  // 处理模板变更
-  const handleTemplateChange = (value: TemplateType) => {
-    setSelectedTemplate(value);
+  // 更新模板变更处理函数
+  const handleTemplateChange = (templateId: string) => {
+    setSelectedTemplateId(templateId);
   };
 
   useEffect(() => {
@@ -330,114 +309,337 @@ const ReceiptGenerator = () => {
     }
   }, [transaction.amount, transaction.taxRate, transaction.tipRate, calculateAmounts]);
 
+  // 更新 useEffect
   useEffect(() => {
-    if (selectedTemplate && transaction) {
-      setReceiptContent(templates[selectedTemplate as keyof typeof templates](transaction));
+    if (selectedTemplateId && transaction) {
+      const template = receiptTemplates[selectedTemplateId];
+      if (template) {
+        setReceiptContent(template.render({
+          ...transaction,
+          items: items,
+          ...receiptOptions
+        }));
+      }
     }
-  }, [selectedTemplate, transaction, templates]);
+  }, [selectedTemplateId, transaction, items, receiptOptions]);
+
+  // 修改生成图片功能
+  const generateImage = async () => {
+    const receiptElement = document.getElementById('receipt');
+    if (receiptElement) {
+      try {
+        const canvas = await html2canvas(receiptElement, {
+          scale: 2, // 提高清晰度
+          logging: false,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          imageTimeout: 0,
+          removeContainer: true,
+          allowTaint: true,
+        });
+        
+        // 优化图片质量
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        
+        // 使用文件名格式化
+        const fileName = `receipt-${transaction.merchant}-${
+          new Date().toISOString().split('T')[0]
+        }.png`;
+        
+        const link = document.createElement('a');
+        link.href = imgData;
+        link.download = fileName;
+        link.click();
+        
+        toast({
+          title: "成功",
+          description: "小票图片已生成",
+        });
+      } catch (err) {
+        toast({
+          title: "错误",
+          description: "生成图片时出错",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  // 添加商品项目编辑UI
+  const ItemsEditor = () => (
+    <div className="mt-6 border rounded-lg p-4">
+      <h3 className="font-medium mb-4">Items</h3>
+      
+      {/* 添加新商品 */}
+      <div className="grid grid-cols-12 gap-2 mb-4">
+        <div className="col-span-5">
+          <Input
+            placeholder="Item name"
+            value={newItem.name}
+            onChange={(e) => setNewItem(prev => ({
+              ...prev,
+              name: e.target.value
+            }))}
+          />
+        </div>
+        <div className="col-span-2">
+          <Input
+            type="number"
+            min="1"
+            placeholder="Qty"
+            value={newItem.quantity}
+            onChange={(e) => setNewItem(prev => ({
+              ...prev,
+              quantity: parseInt(e.target.value) || 1
+            }))}
+          />
+        </div>
+        <div className="col-span-3">
+          <Input
+            type="number"
+            step="0.01"
+            placeholder="Price"
+            value={newItem.price}
+            onChange={(e) => setNewItem(prev => ({
+              ...prev,
+              price: parseFloat(e.target.value) || 0
+            }))}
+          />
+        </div>
+        <div className="col-span-2">
+          <Button
+            onClick={() => {
+              if (newItem.name && newItem.price > 0) {
+                const total = newItem.quantity * newItem.price;
+                setItems(prev => [...prev, { ...newItem, total }]);
+                setNewItem({ name: '', quantity: 1, price: 0 });
+                
+                // 更新总金额
+                const newTotal = items.reduce((sum, item) => sum + item.total, 0) + total;
+                setTransaction(prev => ({
+                  ...prev,
+                  amount: newTotal.toFixed(2)
+                }));
+              }
+            }}
+            className="w-full"
+          >
+            Add
+          </Button>
+        </div>
+      </div>
+
+      {/* 商品列表 */}
+      {items.length > 0 && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-12 gap-2 text-sm font-medium">
+            <div className="col-span-5">Item</div>
+            <div className="col-span-2 text-center">Qty</div>
+            <div className="col-span-2 text-right">Price</div>
+            <div className="col-span-2 text-right">Total</div>
+            <div className="col-span-1"></div>
+          </div>
+          {items.map((item, index) => (
+            <div key={index} className="grid grid-cols-12 gap-2 text-sm">
+              <div className="col-span-5">{item.name}</div>
+              <div className="col-span-2 text-center">{item.quantity}</div>
+              <div className="col-span-2 text-right">${item.price.toFixed(2)}</div>
+              <div className="col-span-2 text-right">${item.total.toFixed(2)}</div>
+              <div className="col-span-1">
+                <button
+                  onClick={() => {
+                    setItems(prev => prev.filter((_, i) => i !== index));
+                    // 更新总金额
+                    const newTotal = items
+                      .filter((_, i) => i !== index)
+                      .reduce((sum, item) => sum + item.total, 0);
+                    setTransaction(prev => ({
+                      ...prev,
+                      amount: newTotal.toFixed(2)
+                    }));
+                  }}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // 当商户信息更新或总金额更新时，生成默认消费条目
+  useEffect(() => {
+    if (transaction.merchant && transaction.amount && selectedTemplateId) {
+      const template = receiptTemplates[selectedTemplateId];
+      const generatedItems = generateDefaultItems(template, parseFloat(transaction.amount));
+      setItems(generatedItems);
+    }
+  }, [transaction.merchant, transaction.amount, selectedTemplateId]);
 
   return (
-    <Card className="w-full max-w-4xl mx-auto">
+    <Card className="w-full max-w-6xl mx-auto">
       <CardContent className="p-6">
         <div className="grid grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Receipt Details</h2>
-            
-            <div className="relative">
-              <Input
-                placeholder="Merchant Name"
-                value={transaction.merchant}
-                onChange={handleMerchantChange}
-                className="w-full"
-              />
-              {isSearching && (
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                  <div className="animate-spin h-4 w-4 border-2 border-gray-500 rounded-full border-t-transparent"></div>
+          {/* 左侧面板：所有设置选项 */}
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold mb-4">Receipt Details</h2>
+              
+              {/* 商户信息部分 */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Business Name</label>
+                  <Input
+                    value={transaction.merchant}
+                    onChange={(e) => setTransaction({...transaction, merchant: e.target.value})}
+                    placeholder="Enter business name"
+                  />
                 </div>
-              )}
-            </div>
-            
-            <Input
-              placeholder="Address (123 Main St, City, State ZIP)"
-              value={transaction.address}
-              onChange={(e) => setTransaction(prev => ({ ...prev, address: e.target.value }))}
-              className="w-full"
-            />
-            
-            <Input
-              placeholder="Phone (+1 123-456-7890)"
-              value={transaction.phone}
-              onChange={(e) => setTransaction(prev => ({ ...prev, phone: e.target.value }))}
-              className="w-full"
-            />
-            
-            <div>
-              <label className="block text-sm font-medium mb-1">Date</label>
-              <Input
-                type="date"
-                value={transaction.date}
-                onChange={(e) => setTransaction({...transaction, date: e.target.value})}
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium mb-1">Total Amount ($)</label>
-              <Input
-                type="number"
-                step="0.01"
-                value={transaction.amount}
-                onChange={(e) => setTransaction({...transaction, amount: e.target.value})}
-                placeholder="Enter total amount"
-              />
+                <div>
+                  <label className="block text-sm font-medium mb-1">Address</label>
+                  <Input
+                    value={transaction.address}
+                    onChange={(e) => setTransaction({...transaction, address: e.target.value})}
+                    placeholder="Enter address"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Phone</label>
+                  <Input
+                    value={transaction.phone}
+                    onChange={(e) => setTransaction({...transaction, phone: e.target.value})}
+                    placeholder="Enter phone number"
+                  />
+                </div>
+              </div>
             </div>
 
+            {/* 模板选择部分 */}
             <div>
-              <label className="block text-sm font-medium mb-1">Tax Rate (%)</label>
-              <Input
-                type="number"
-                step="0.001"
-                value={transaction.taxRate}
-                onChange={handleTaxRateChange}
-              />
+              <h3 className="font-medium mb-4">Receipt Template</h3>
+              <div className="grid grid-cols-2 gap-4">
+                {Object.values(receiptTemplates).map(template => (
+                  <div
+                    key={template.id}
+                    className={`border rounded-lg p-3 cursor-pointer transition-all ${
+                      selectedTemplateId === template.id ? 'border-blue-500 bg-blue-50' : 'hover:border-gray-400'
+                    }`}
+                    onClick={() => handleTemplateChange(template.id)}
+                  >
+                    <img
+                      src={template.preview}
+                      alt={template.name}
+                      className="w-full h-24 object-contain mb-2"
+                    />
+                    <h4 className="font-medium text-sm">{template.name}</h4>
+                    <p className="text-xs text-gray-600">{template.description}</p>
+                  </div>
+                ))}
+              </div>
             </div>
 
+            {/* 金额和税率设置 */}
             <div>
-              <label className="block text-sm font-medium mb-1">Tip Rate (%)</label>
-              <Input
-                type="number"
-                step="0.1"
-                value={transaction.tipRate}
-                onChange={handleTipRateChange}
-              />
+              <h3 className="font-medium mb-4">Amount & Tax</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Total Amount ($)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={transaction.amount}
+                    onChange={(e) => setTransaction({...transaction, amount: e.target.value})}
+                    placeholder="Enter total amount"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Tax Rate (%)</label>
+                  <Input
+                    type="number"
+                    step="0.001"
+                    value={transaction.taxRate}
+                    onChange={handleTaxRateChange}
+                  />
+                </div>
+              </div>
             </div>
 
+            {/* 选项设置 */}
             <div>
-              <label className="block text-sm font-medium mb-1">Receipt Style</label>
-              <Select
-                value={selectedTemplate}
-                onValueChange={handleTemplateChange}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select style" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="thermal">Thermal Printer Style</SelectItem>
-                  <SelectItem value="pos">POS Terminal Style</SelectItem>
-                  <SelectItem value="modern">Modern Style</SelectItem>
-                </SelectContent>
-              </Select>
+              <h3 className="font-medium mb-4">Receipt Options</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={receiptOptions.hasLogo}
+                    onChange={e => setReceiptOptions(prev => ({ ...prev, hasLogo: e.target.checked }))}
+                  />
+                  <span>Include Logo</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={receiptOptions.showItems}
+                    onChange={e => setReceiptOptions(prev => ({ ...prev, showItems: e.target.checked }))}
+                  />
+                  <span>Show Items</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={receiptOptions.showPaymentDetails}
+                    onChange={e => setReceiptOptions(prev => ({ ...prev, showPaymentDetails: e.target.checked }))}
+                  />
+                  <span>Payment Details</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={receiptOptions.showOrderNumber}
+                    onChange={e => setReceiptOptions(prev => ({ ...prev, showOrderNumber: e.target.checked }))}
+                  />
+                  <span>Order Number</span>
+                </label>
+              </div>
             </div>
 
-            <Button className="w-full" onClick={exportToPDF}>
-              <Download className="w-4 h-4 mr-2" />
-              Export PDF
-            </Button>
+            {/* 商品管理部分 */}
+            {receiptOptions.showItems && (
+              <div>
+                <h3 className="font-medium mb-4">Items Management</h3>
+                <ItemsEditor />
+              </div>
+            )}
           </div>
 
+          {/* 右侧面板：预览和下载 */}
           <div>
-            <h2 className="text-lg font-semibold mb-4">Preview</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold">Preview</h2>
+              <div className="flex gap-2">
+                <Button
+                  onClick={generateImage}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Image
+                </Button>
+                <Button
+                  onClick={generatePDF}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download PDF
+                </Button>
+              </div>
+            </div>
             <div className="border rounded bg-gray-50 p-4">
-              <div ref={receiptRef}>
+              <div ref={receiptRef} className="bg-white shadow-lg mx-auto" style={{ maxWidth: '380px' }}>
                 {receiptContent}
               </div>
             </div>
