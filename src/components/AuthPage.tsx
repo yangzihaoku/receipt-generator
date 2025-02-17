@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
-import { AuthState } from '@/types/auth';
 
 export default function AuthPage() {
   const router = useRouter();

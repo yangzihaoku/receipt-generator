@@ -1,11 +1,11 @@
 import ReceiptGenerator from '@/components/ReceiptGenerator'
-import { Toaster } from "@/components/ui/toaster"
 
 export default function Home() {
   return (
-    <main className="container mx-auto py-8">
-      <ReceiptGenerator />
-      <Toaster />
+    <main className="min-h-screen bg-gray-100 py-8">
+      <div className="container mx-auto px-4">
+        <ReceiptGenerator />
+      </div>
     </main>
   )
 }

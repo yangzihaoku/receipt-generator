@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Download } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from 'jspdf';
@@ -45,11 +44,6 @@ interface ReceiptData {
 }
 
 // 辅助函数
-const generateOrderNumber = () => Math.random().toString(36).substr(2, 8).toUpperCase();
-const generateLastFourDigits = () => Math.floor(1000 + Math.random() * 9000).toString();
-const generateAuthCode = () => Math.random().toString(36).substr(2, 6).toUpperCase();
-const generateTerminalId = () => 'TERM' + Math.floor(100 + Math.random() * 900);
-const generateStaffId = () => Math.floor(100 + Math.random() * 900);
 const generateReceiptBarcode = () => (
   <div className="mt-2 text-center">
     <div className="font-mono text-xs">
@@ -480,173 +474,188 @@ const ReceiptGenerator = () => {
   }, [transaction.merchant, transaction.amount, selectedTemplateId]);
 
   return (
-    <Card className="w-full max-w-6xl mx-auto">
-      <CardContent className="p-6">
-        <div className="grid grid-cols-2 gap-6">
-          {/* 左侧面板：所有设置选项 */}
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold mb-4">Receipt Details</h2>
-              
-              {/* 商户信息部分 */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Business Name</label>
-                  <Input
-                    value={transaction.merchant}
-                    onChange={(e) => setTransaction({...transaction, merchant: e.target.value})}
-                    placeholder="Enter business name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Address</label>
-                  <Input
-                    value={transaction.address}
-                    onChange={(e) => setTransaction({...transaction, address: e.target.value})}
-                    placeholder="Enter address"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Phone</label>
-                  <Input
-                    value={transaction.phone}
-                    onChange={(e) => setTransaction({...transaction, phone: e.target.value})}
-                    placeholder="Enter phone number"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* 模板选择部分 */}
-            <div>
-              <h3 className="font-medium mb-4">Receipt Template</h3>
-              <div className="grid grid-cols-2 gap-4">
-                {Object.values(receiptTemplates).map(template => (
-                  <div
-                    key={template.id}
-                    className={`border rounded-lg p-3 cursor-pointer transition-all ${
-                      selectedTemplateId === template.id ? 'border-blue-500 bg-blue-50' : 'hover:border-gray-400'
-                    }`}
-                    onClick={() => handleTemplateChange(template.id)}
-                  >
-                    <img
-                      src={template.preview}
-                      alt={template.name}
-                      className="w-full h-24 object-contain mb-2"
-                    />
-                    <h4 className="font-medium text-sm">{template.name}</h4>
-                    <p className="text-xs text-gray-600">{template.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 金额和税率设置 */}
-            <div>
-              <h3 className="font-medium mb-4">Amount & Tax</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Total Amount ($)</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={transaction.amount}
-                    onChange={(e) => setTransaction({...transaction, amount: e.target.value})}
-                    placeholder="Enter total amount"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Tax Rate (%)</label>
-                  <Input
-                    type="number"
-                    step="0.001"
-                    value={transaction.taxRate}
-                    onChange={handleTaxRateChange}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* 选项设置 */}
-            <div>
-              <h3 className="font-medium mb-4">Receipt Options</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={receiptOptions.hasLogo}
-                    onChange={e => setReceiptOptions(prev => ({ ...prev, hasLogo: e.target.checked }))}
-                  />
-                  <span>Include Logo</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={receiptOptions.showItems}
-                    onChange={e => setReceiptOptions(prev => ({ ...prev, showItems: e.target.checked }))}
-                  />
-                  <span>Show Items</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={receiptOptions.showPaymentDetails}
-                    onChange={e => setReceiptOptions(prev => ({ ...prev, showPaymentDetails: e.target.checked }))}
-                  />
-                  <span>Payment Details</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={receiptOptions.showOrderNumber}
-                    onChange={e => setReceiptOptions(prev => ({ ...prev, showOrderNumber: e.target.checked }))}
-                  />
-                  <span>Order Number</span>
-                </label>
-              </div>
-            </div>
-
-            {/* 商品管理部分 */}
-            {receiptOptions.showItems && (
+    <div className="layout-container">
+      <Card className="card-layout">
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 左侧面板：所有设置选项 */}
+            <div className="space-y-6 form-section">
               <div>
-                <h3 className="font-medium mb-4">Items Management</h3>
-                <ItemsEditor />
+                <h2 className="text-2xl font-bold mb-6">Receipt Details</h2>
+                
+                {/* 商户信息部分 */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Business Name</label>
+                    <Input
+                      value={transaction.merchant}
+                      onChange={(e) => setTransaction({...transaction, merchant: e.target.value})}
+                      placeholder="Enter business name"
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Address</label>
+                    <Input
+                      value={transaction.address}
+                      onChange={(e) => setTransaction({...transaction, address: e.target.value})}
+                      placeholder="Enter address"
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Phone</label>
+                    <Input
+                      value={transaction.phone}
+                      onChange={(e) => setTransaction({...transaction, phone: e.target.value})}
+                      placeholder="Enter phone number"
+                      className="w-full"
+                    />
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
 
-          {/* 右侧面板：预览和下载 */}
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">Preview</h2>
-              <div className="flex gap-2">
-                <Button
-                  onClick={generateImage}
-                  variant="outline"
-                  size="sm"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download Image
-                </Button>
-                <Button
-                  onClick={generatePDF}
-                  variant="outline"
-                  size="sm"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download PDF
-                </Button>
+              {/* 模板选择部分 */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Receipt Template</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {Object.values(receiptTemplates).map(template => (
+                    <div
+                      key={template.id}
+                      className={`border rounded-lg p-3 cursor-pointer transition-all ${
+                        selectedTemplateId === template.id ? 'border-primary bg-primary/5' : 'hover:border-gray-400'
+                      }`}
+                      onClick={() => handleTemplateChange(template.id)}
+                    >
+                      <div className="aspect-[4/3] relative mb-2">
+                        <img
+                          src={template.preview}
+                          alt={template.name}
+                          className="w-full h-full object-cover rounded"
+                        />
+                      </div>
+                      <h4 className="font-medium text-sm">{template.name}</h4>
+                      <p className="text-xs text-muted-foreground">{template.description}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
+
+              {/* 金额和税率设置 */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Amount & Tax</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Total Amount ($)</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={transaction.amount}
+                      onChange={(e) => setTransaction({...transaction, amount: e.target.value})}
+                      placeholder="Enter total amount"
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Tax Rate (%)</label>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      value={transaction.taxRate}
+                      onChange={handleTaxRateChange}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 选项设置 */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Receipt Options</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={receiptOptions.hasLogo}
+                      onChange={e => setReceiptOptions(prev => ({ ...prev, hasLogo: e.target.checked }))}
+                      className="rounded border-gray-300"
+                    />
+                    <span>Include Logo</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={receiptOptions.showItems}
+                      onChange={e => setReceiptOptions(prev => ({ ...prev, showItems: e.target.checked }))}
+                      className="rounded border-gray-300"
+                    />
+                    <span>Show Items</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={receiptOptions.showPaymentDetails}
+                      onChange={e => setReceiptOptions(prev => ({ ...prev, showPaymentDetails: e.target.checked }))}
+                      className="rounded border-gray-300"
+                    />
+                    <span>Payment Details</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={receiptOptions.showOrderNumber}
+                      onChange={e => setReceiptOptions(prev => ({ ...prev, showOrderNumber: e.target.checked }))}
+                      className="rounded border-gray-300"
+                    />
+                    <span>Order Number</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* 商品管理部分 */}
+              {receiptOptions.showItems && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Items Management</h3>
+                  <ItemsEditor />
+                </div>
+              )}
             </div>
-            <div className="border rounded bg-gray-50 p-4">
-              <div ref={receiptRef} className="bg-white shadow-lg mx-auto" style={{ maxWidth: '380px' }}>
-                {receiptContent}
+
+            {/* 右侧面板：预览和下载 */}
+            <div className="relative">
+              <div className="sticky top-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-bold">Preview</h2>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={generateImage}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Image
+                    </Button>
+                    <Button
+                      onClick={generatePDF}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download PDF
+                    </Button>
+                  </div>
+                </div>
+                <div className="border rounded-lg bg-gray-50 p-4">
+                  <div ref={receiptRef} className="bg-white shadow-lg mx-auto" style={{ maxWidth: '380px' }}>
+                    {receiptContent}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 
