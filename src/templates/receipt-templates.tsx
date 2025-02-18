@@ -1,5 +1,13 @@
 import { ReceiptData } from '@/types/receipt';
-import { generateOrderNumber, generateLastFourDigits, generateAuthCode, generateTerminalId, generateStaffId, generateReceiptBarcode, generateDepartmentCode } from '@/utils/receipt-helpers';
+import { 
+  generateOrderNumber, 
+  generateLastFourDigits, 
+  generateAuthCode, 
+  generateTerminalId, 
+  generateStaffId, 
+  generateReceiptBarcode, 
+  generateDepartmentCode 
+} from '@/utils/receipt-helpers';
 
 export interface TemplateType {
   id: string;
