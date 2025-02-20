@@ -1,5 +1,5 @@
 import React from 'react';
-import { TemplateType } from '@/templates/receipt-templates';
+import { TemplateType, BusinessCategory } from '@/templates/receipt-templates';
 
 // 生成随机数和格式化函数
 const generateOrderNumber = () => Math.random().toString(36).substr(2, 8).toUpperCase();
@@ -23,33 +23,21 @@ const getRandomPrice = (min: number, max: number): number => {
   return parseFloat((Math.random() * (max - min) + min).toFixed(2));
 };
 
-// 扩展 BusinessCategory 类型以包含所有可能的类别
-type BusinessCategory = 'restaurant' | 'cafe' | 'pizzeria' | 'fastfood' | 'retail' | 'service';
-
-type BusinessHours = {
-  [key in BusinessCategory]: {
-    open: number;
-    close: number;
-  };
-};
-
 // 修改函数定义，添加类型注解
-const generateReceiptTime = (category: string) => {
+const generateReceiptTime = (category: BusinessCategory) => {
   const now = new Date();
   const currentHour = now.getHours();
   
-  // 根据商户类型调整营业时间
-  const businessHours: BusinessHours = {
-    restaurant: { open: 11, close: 23 },
-    cafe: { open: 6, close: 21 },      // 咖啡店早开门
-    pizzeria: { open: 11, close: 23 }, // 披萨店晚关门
-    fastfood: { open: 10, close: 22 },  // 快餐店
-    retail: { open: 9, close: 18 },      // 零售店
-    service: { open: 9, close: 18 }      // 服务店
+  const businessHours: Record<BusinessCategory, { open: number; close: number }> = {
+    [BusinessCategory.Restaurant]: { open: 11, close: 23 },
+    [BusinessCategory.Retail]: { open: 9, close: 18 },
+    [BusinessCategory.Service]: { open: 9, close: 18 },
+    [BusinessCategory.Cafe]: { open: 6, close: 21 },
+    [BusinessCategory.Pizzeria]: { open: 11, close: 23 },
+    [BusinessCategory.Fastfood]: { open: 10, close: 22 }
   };
 
-  // 使用类型断言来告诉 TypeScript category 是有效的键
-  const storeHours = businessHours[category as BusinessCategory] || { open: 9, close: 21 };
+  const storeHours = businessHours[category] || { open: 9, close: 21 };
   
   if (currentHour < storeHours.open || currentHour > storeHours.close) {
     now.setHours(Math.floor(Math.random() * (storeHours.close - storeHours.open) + storeHours.open));
@@ -80,15 +68,15 @@ const generatePaymentInfo = (amount: number, category: BusinessCategory) => {
     approvalCode: Math.random().toString(36).substr(2, 6).toUpperCase(),
     cardType: isDebit ? 'DEBIT' : 'CREDIT',
     // 根据商户类型添加额外信息
-    ...(category === 'restaurant' && {
+    ...(category === BusinessCategory.Restaurant && {
       tipAmount: (amount * 0.15).toFixed(2),
       tipPercentage: '15%'
     }),
-    ...(category === 'retail' && {
+    ...(category === BusinessCategory.Retail && {
       cashback: '0.00',
       rewardsEarned: Math.floor(amount)
     }),
-    ...(category === 'service' && {
+    ...(category === BusinessCategory.Service && {
       gratuityOptions: {
         fifteen: (amount * 0.15).toFixed(2),
         eighteen: (amount * 0.18).toFixed(2),
@@ -165,7 +153,7 @@ const generateRestaurantPaymentInfo = (amount: number, category: BusinessCategor
   const baseInfo = generatePaymentInfo(amount, category);
   
   // 添加餐饮特定的信息
-  if (category === 'restaurant' || category === 'pizzeria') {
+  if (category === BusinessCategory.Restaurant || category === BusinessCategory.Pizzeria) {
     return {
       ...baseInfo,
       tableNumber: Math.floor(Math.random() * 30) + 1,
@@ -178,7 +166,7 @@ const generateRestaurantPaymentInfo = (amount: number, category: BusinessCategor
     };
   }
   
-  if (category === 'cafe' || category === 'fastfood') {
+  if (category === BusinessCategory.Cafe || category === BusinessCategory.Fastfood) {
     return {
       ...baseInfo,
       orderNumber: generateOrderNumber(),
@@ -198,32 +186,32 @@ const generateOrderInfo = (category: BusinessCategory) => {
   };
 
   switch (category) {
-    case 'restaurant':
-    case 'pizzeria':
+    case BusinessCategory.Restaurant:
+    case BusinessCategory.Pizzeria:
       return {
         ...baseInfo,
         tableNumber: Math.floor(Math.random() * 30) + 1,
         serverName: `Server #${generateStaffId()}`,
         guestCount: Math.floor(Math.random() * 4) + 1
       };
-    case 'cafe':
+    case BusinessCategory.Cafe:
       return {
         ...baseInfo,
         barista: `Barista #${generateStaffId()}`,
         orderType: Math.random() > 0.5 ? 'Dine In' : 'To Go'
       };
-    case 'fastfood':
+    case BusinessCategory.Fastfood:
       return {
         ...baseInfo,
         orderType: Math.random() > 0.7 ? 'Drive Thru' : 'Counter',
         orderNumber: `#${Math.floor(Math.random() * 100)}`
       };
-    case 'retail':
+    case BusinessCategory.Retail:
       return {
         ...baseInfo,
         cashier: `Cashier #${generateStaffId()}`
       };
-    case 'service':
+    case BusinessCategory.Service:
       return {
         ...baseInfo,
         serviceProvider: `Provider #${generateStaffId()}`
@@ -235,30 +223,25 @@ const generateOrderInfo = (category: BusinessCategory) => {
 
 // 修改 generateDefaultItems
 const generateDefaultItems = (
-  template: TemplateType & { category: BusinessCategory },
+  template: TemplateType,
   totalAmount: number
 ): Array<{name: string; quantity: number; price: number; total: number}> => {
   const items = template.defaultItems || [];
   const result = [];
   let remainingAmount = totalAmount;
-  const usedItems = new Set<number>();  // 跟踪已使用的商品，避免重复
+  const usedItems = new Set<number>();
 
-  while (remainingAmount > 5 && usedItems.size < items.length) {  // 保留至少$5用于最后一个商品
-    // 选择一个未使用的随机商品
-    let availableItems = items.filter((_, index) => !usedItems.has(index));
+  while (remainingAmount > 5 && usedItems.size < items.length) {
+    let availableItems = items.filter((_: any, index: number) => !usedItems.has(index));
     const randomItem = availableItems[Math.floor(Math.random() * availableItems.length)];
     const itemIndex = items.indexOf(randomItem);
     usedItems.add(itemIndex);
 
-    // 根据价格范围生成随机价格
     const price = getRandomPrice(randomItem.priceRange[0], randomItem.priceRange[1]);
-    
-    // 根据剩余金额决定数量
     const maxQuantity = Math.floor(remainingAmount / price);
     const quantity = Math.max(1, Math.min(maxQuantity, 
-      // 根据商品类型限制最大数量
-      template.category === 'restaurant' ? 2 : 
-      template.category === 'retail' ? 3 : 4
+      template.category === BusinessCategory.Restaurant ? 2 : 
+      template.category === BusinessCategory.Retail ? 3 : 4
     ));
 
     const total = parseFloat((price * quantity).toFixed(2));
