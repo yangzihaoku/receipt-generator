@@ -136,20 +136,30 @@ const ReceiptGenerator = () => {
 
   // 商户搜索函数
   const searchMerchant = useCallback(async (query: string) => {
-    if (!query || query.length < 3) return;
+    if (!query || query.length < 3) {
+      console.log('Query too short, skipping search');
+      return;
+    }
     
+    console.log('Starting merchant search for:', query);
     setIsSearching(true);
     try {
-      const response = await fetch(`/api/places/search?query=${encodeURIComponent(query)}&t=${Date.now()}`);
+      const url = `/api/places/search?query=${encodeURIComponent(query)}&t=${Date.now()}`;
+      console.log('Fetching URL:', url);
+      
+      const response = await fetch(url);
+      console.log('Search response status:', response.status);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
+      console.log('Search results:', data);
       
       if (data.results?.length > 0) {
         const place = data.results[0];
+        console.log('Found place:', place);
         
         setTransaction(prev => ({
           ...prev,
@@ -163,6 +173,7 @@ const ReceiptGenerator = () => {
           description: "Merchant information found and filled",
         });
       } else {
+        console.log('No results found');
         toast({
           title: "No Results",
           description: `No information found for "${query}"`,
@@ -170,6 +181,7 @@ const ReceiptGenerator = () => {
         });
       }
     } catch (error) {
+      console.error('Search error:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to fetch merchant information",
@@ -267,11 +279,20 @@ const ReceiptGenerator = () => {
     }
   };
 
-  // 处理商户名称输入
+  // 修改商户名称输入处理函数
   const handleMerchantChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
+    console.log('Merchant name changed:', value);
+    
     setTransaction(prev => ({ ...prev, merchant: value }));
-    searchMerchant(value);
+    
+    // 只有当输入长度大于等于3时才触发搜索
+    if (value.length >= 3) {
+      console.log('Triggering search for:', value);
+      searchMerchant(value);
+    } else {
+      console.log('Input too short, waiting for more characters');
+    }
   };
 
   // 处理税率变化
@@ -489,7 +510,7 @@ const ReceiptGenerator = () => {
                     <label className="block text-sm font-medium mb-1">Business Name</label>
                     <Input
                       value={transaction.merchant}
-                      onChange={(e) => setTransaction({...transaction, merchant: e.target.value})}
+                      onChange={handleMerchantChange}
                       placeholder="Enter business name"
                       className="w-full"
                     />
