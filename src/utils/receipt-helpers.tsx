@@ -1,12 +1,35 @@
 import React from 'react';
-import { TemplateType, BusinessCategory } from '@/templates/receipt-templates';
+import type { TemplateType } from '@/templates/receipt-templates';
+
+// 定义本地的 BusinessCategory 类型
+type BusinessCategory = 'restaurant' | 'retail' | 'service' | 'cafe' | 'pizzeria' | 'fastfood';
 
 // 生成随机数和格式化函数
-const generateOrderNumber = () => Math.random().toString(36).substr(2, 8).toUpperCase();
+const generateOrderNumber = () => {
+  const date = new Date();
+  const year = date.getFullYear().toString().slice(-2);
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const random = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+  
+  return `${year}${month}${day}-${random}`;
+};
+
 const generateLastFourDigits = () => Math.floor(1000 + Math.random() * 9000).toString();
 const generateAuthCode = () => Math.random().toString(36).substr(2, 6).toUpperCase();
-const generateTerminalId = () => 'TERM' + Math.floor(100 + Math.random() * 900);
-const generateStaffId = () => Math.floor(100 + Math.random() * 900);
+const generateTerminalId = () => {
+  const storeNum = Math.floor(1000 + Math.random() * 9000);
+  const termNum = Math.floor(1 + Math.random() * 9);
+  return `${storeNum}-${termNum}`;
+};
+
+// 添加员工ID生成逻辑
+const generateStaffId = () => {
+  const prefix = ['S', 'W', 'M'][Math.floor(Math.random() * 3)]; // Server, Waiter, Manager
+  const id = Math.floor(1000 + Math.random() * 9000);
+  return `${prefix}${id}`;
+};
+
 const generateDepartmentCode = () => Math.floor(Math.random() * 99).toString().padStart(2, '0');
 
 // 添加回 generateReceiptBarcode 函数定义
@@ -24,20 +47,24 @@ const getRandomPrice = (min: number, max: number): number => {
 };
 
 // 修改函数定义，添加类型注解
-const generateReceiptTime = (category: BusinessCategory) => {
+const generateReceiptTime = (category: string) => {
   const now = new Date();
   const currentHour = now.getHours();
   
-  const businessHours: Record<BusinessCategory, { open: number; close: number }> = {
-    [BusinessCategory.Restaurant]: { open: 11, close: 23 },
-    [BusinessCategory.Retail]: { open: 9, close: 18 },
-    [BusinessCategory.Service]: { open: 9, close: 18 },
-    [BusinessCategory.Cafe]: { open: 6, close: 21 },
-    [BusinessCategory.Pizzeria]: { open: 11, close: 23 },
-    [BusinessCategory.Fastfood]: { open: 10, close: 22 }
+  // 使用 Record 和字符串字面量类型
+  type BusinessHours = Record<string, { open: number; close: number }>;
+  
+  const businessHours: BusinessHours = {
+    'restaurant': { open: 11, close: 23 },
+    'retail': { open: 9, close: 18 },
+    'service': { open: 9, close: 18 },
+    'cafe': { open: 6, close: 21 },
+    'pizzeria': { open: 11, close: 23 },
+    'fastfood': { open: 10, close: 22 }
   };
 
-  const storeHours = businessHours[category] || { open: 9, close: 21 };
+  // 使用类型断言来确保类型安全
+  const storeHours = businessHours[category as keyof BusinessHours] || { open: 9, close: 21 };
   
   if (currentHour < storeHours.open || currentHour > storeHours.close) {
     now.setHours(Math.floor(Math.random() * (storeHours.close - storeHours.open) + storeHours.open));
@@ -54,35 +81,70 @@ const generateReceiptTime = (category: BusinessCategory) => {
   };
 };
 
-// 修改 generatePaymentInfo
-const generatePaymentInfo = (amount: number, category: BusinessCategory) => {
-  const methods = ['VISA', 'MASTERCARD', 'AMEX', 'DISCOVER'];
-  const method = methods[Math.floor(Math.random() * methods.length)];
-  const isDebit = Math.random() > 0.7;
+// 添加更多支付方式选项
+const PaymentMethods = {
+  CREDIT: {
+    types: ['VISA', 'MASTERCARD', 'AMEX', 'DISCOVER'],
+    entryMethods: ['CHIP', 'SWIPE', 'TAP', 'MANUAL'],
+    prefix: 'xxxx-xxxx-xxxx-'
+  },
+  DEBIT: {
+    types: ['VISA DEBIT', 'MASTERCARD DEBIT', 'INTERAC'],
+    entryMethods: ['CHIP', 'SWIPE', 'TAP'],
+    prefix: 'xxxx-xxxx-xxxx-'
+  },
+  MOBILE: {
+    types: ['APPLE PAY', 'GOOGLE PAY', 'SAMSUNG PAY'],
+    entryMethods: ['TAP', 'QR'],
+    prefix: 'MOBILE-'
+  }
+};
+
+// 改进支付信息生成
+const generatePaymentInfo = (amount: number, category: string) => {
+  // 随机选择支付方式
+  const paymentType = Math.random() > 0.3 ? 'CREDIT' : 
+    Math.random() > 0.5 ? 'DEBIT' : 'MOBILE';
+  const paymentMethod = PaymentMethods[paymentType];
   
-  return {
-    method,
-    cardNumber: `**** **** **** ${generateLastFourDigits()}`,
+  // 生成基本支付信息
+  const baseInfo = {
+    method: paymentMethod.types[Math.floor(Math.random() * paymentMethod.types.length)],
+    entryMethod: paymentMethod.entryMethods[Math.floor(Math.random() * paymentMethod.entryMethods.length)],
+    cardNumber: paymentType === 'MOBILE' ? 
+      `${paymentMethod.prefix}${generateAuthCode()}` :
+      `${paymentMethod.prefix}${generateLastFourDigits()}`,
     authCode: generateAuthCode(),
-    entryMethod: Math.random() > 0.3 ? 'CHIP' : 'SWIPE',
     approvalCode: Math.random().toString(36).substr(2, 6).toUpperCase(),
-    cardType: isDebit ? 'DEBIT' : 'CREDIT',
-    // 根据商户类型添加额外信息
-    ...(category === BusinessCategory.Restaurant && {
-      tipAmount: (amount * 0.15).toFixed(2),
-      tipPercentage: '15%'
-    }),
-    ...(category === BusinessCategory.Retail && {
+    transactionId: `TXN${Date.now()}${Math.floor(Math.random() * 1000)}`,
+    paymentStatus: 'APPROVED',
+    processingFee: (amount * 0.029 + 0.30).toFixed(2)
+  };
+
+  // 修改商户类型特定信息的判断
+  const categorySpecificInfo: Record<string, any> = {
+    restaurant: {
+      tipSuggestions: {
+        '15%': (amount * 0.15).toFixed(2),
+        '18%': (amount * 0.18).toFixed(2),
+        '20%': (amount * 0.20).toFixed(2)
+      },
+      tableService: true
+    },
+    retail: {
       cashback: '0.00',
-      rewardsEarned: Math.floor(amount)
-    }),
-    ...(category === BusinessCategory.Service && {
-      gratuityOptions: {
-        fifteen: (amount * 0.15).toFixed(2),
-        eighteen: (amount * 0.18).toFixed(2),
-        twenty: (amount * 0.20).toFixed(2)
-      }
-    })
+      rewardsEarned: Math.floor(amount * 10),
+      membershipTier: Math.random() > 0.7 ? 'GOLD' : 'REGULAR'
+    },
+    service: {
+      appointmentId: `APT-${generateAuthCode()}`,
+      serviceType: 'STANDARD'
+    }
+  };
+
+  return {
+    ...baseInfo,
+    ...(categorySpecificInfo[category] || {})
   };
 };
 
@@ -149,11 +211,11 @@ const generateFoodDescription = (item: { name: string, price: number }) => {
 };
 
 // 修改 generateRestaurantPaymentInfo
-const generateRestaurantPaymentInfo = (amount: number, category: BusinessCategory) => {
+const generateRestaurantPaymentInfo = (amount: number, category: string) => {
   const baseInfo = generatePaymentInfo(amount, category);
   
   // 添加餐饮特定的信息
-  if (category === BusinessCategory.Restaurant || category === BusinessCategory.Pizzeria) {
+  if (category === 'restaurant' || category === 'pizzeria') {
     return {
       ...baseInfo,
       tableNumber: Math.floor(Math.random() * 30) + 1,
@@ -166,7 +228,7 @@ const generateRestaurantPaymentInfo = (amount: number, category: BusinessCategor
     };
   }
   
-  if (category === BusinessCategory.Cafe || category === BusinessCategory.Fastfood) {
+  if (category === 'cafe' || category === 'fastfood') {
     return {
       ...baseInfo,
       orderNumber: generateOrderNumber(),
@@ -179,39 +241,39 @@ const generateRestaurantPaymentInfo = (amount: number, category: BusinessCategor
 };
 
 // 修改 generateOrderInfo
-const generateOrderInfo = (category: BusinessCategory) => {
+const generateOrderInfo = (category: string) => {
   const baseInfo = {
     orderNumber: generateOrderNumber(),
     timestamp: generateReceiptTime(category)
   };
 
   switch (category) {
-    case BusinessCategory.Restaurant:
-    case BusinessCategory.Pizzeria:
+    case 'restaurant':
+    case 'pizzeria':
       return {
         ...baseInfo,
         tableNumber: Math.floor(Math.random() * 30) + 1,
         serverName: `Server #${generateStaffId()}`,
         guestCount: Math.floor(Math.random() * 4) + 1
       };
-    case BusinessCategory.Cafe:
+    case 'cafe':
       return {
         ...baseInfo,
         barista: `Barista #${generateStaffId()}`,
         orderType: Math.random() > 0.5 ? 'Dine In' : 'To Go'
       };
-    case BusinessCategory.Fastfood:
+    case 'fastfood':
       return {
         ...baseInfo,
         orderType: Math.random() > 0.7 ? 'Drive Thru' : 'Counter',
         orderNumber: `#${Math.floor(Math.random() * 100)}`
       };
-    case BusinessCategory.Retail:
+    case 'retail':
       return {
         ...baseInfo,
         cashier: `Cashier #${generateStaffId()}`
       };
-    case BusinessCategory.Service:
+    case 'service':
       return {
         ...baseInfo,
         serviceProvider: `Provider #${generateStaffId()}`
@@ -221,7 +283,7 @@ const generateOrderInfo = (category: BusinessCategory) => {
   }
 };
 
-// 修改 generateDefaultItems
+// 修改 generateDefaultItems 函数
 const generateDefaultItems = (
   template: TemplateType,
   totalAmount: number
@@ -231,6 +293,18 @@ const generateDefaultItems = (
   let remainingAmount = totalAmount;
   const usedItems = new Set<number>();
 
+  // 根据类别确定最大数量
+  const getMaxQuantityByCategory = (category: string): number => {
+    switch (category) {
+      case 'restaurant':
+        return 2;
+      case 'retail':
+        return 3;
+      default:
+        return 4;
+    }
+  };
+
   while (remainingAmount > 5 && usedItems.size < items.length) {
     let availableItems = items.filter((_: any, index: number) => !usedItems.has(index));
     const randomItem = availableItems[Math.floor(Math.random() * availableItems.length)];
@@ -239,9 +313,9 @@ const generateDefaultItems = (
 
     const price = getRandomPrice(randomItem.priceRange[0], randomItem.priceRange[1]);
     const maxQuantity = Math.floor(remainingAmount / price);
-    const quantity = Math.max(1, Math.min(maxQuantity, 
-      template.category === BusinessCategory.Restaurant ? 2 : 
-      template.category === BusinessCategory.Retail ? 3 : 4
+    const quantity = Math.max(1, Math.min(
+      maxQuantity,
+      getMaxQuantityByCategory(template.category)
     ));
 
     const total = parseFloat((price * quantity).toFixed(2));
@@ -272,6 +346,47 @@ const generateDefaultItems = (
   }
 
   return result;
+};
+
+// 修改 calculateTax 函数的类型定义
+const calculateTax = (amount: number, location: string = 'NY') => {
+  type TaxRates = Record<string, number>;
+  
+  const taxRates: TaxRates = {
+    'NY': 8.875,
+    'CA': 7.25,
+    'TX': 6.25,
+    'FL': 6.0,
+  };
+
+  // 使用类型断言
+  const taxRate = taxRates[location as keyof TaxRates] || 8.0;
+  const taxAmount = parseFloat((amount * (taxRate / 100)).toFixed(2));
+
+  return {
+    taxRate,
+    taxAmount,
+    breakdown: {
+      stateTax: parseFloat((taxAmount * 0.7).toFixed(2)),
+      localTax: parseFloat((taxAmount * 0.3).toFixed(2))
+    }
+  };
+};
+
+// 添加小费计算辅助函数
+const calculateTip = (amount: number, percentage: number = 15) => {
+  const tipAmount = parseFloat((amount * (percentage / 100)).toFixed(2));
+  const totalWithTip = parseFloat((amount + tipAmount).toFixed(2));
+
+  return {
+    tipPercentage: percentage,
+    tipAmount,
+    totalWithTip,
+    perPerson: (guests: number) => ({
+      tip: parseFloat((tipAmount / guests).toFixed(2)),
+      total: parseFloat((totalWithTip / guests).toFixed(2))
+    })
+  };
 };
 
 // 确保所有需要的函数都在这里导出
